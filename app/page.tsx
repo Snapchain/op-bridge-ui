@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { WalletIcon, MoonIcon, SunIcon } from "lucide-react";
 import { useTheme } from "next-themes";
-import { ethers, Provider } from "ethers";
+import { ethers } from "ethers";
 import optimismSDK from "@eth-optimism/sdk";
 import {
   useAccount,
@@ -24,25 +24,29 @@ import {
   useBalance,
   useSwitchChain,
   useDisconnect,
+  Connector,
 } from "wagmi";
 import {
   opStackL1Contracts,
-  bridges,
   NEXT_PUBLIC_L1_CHAIN_ID,
   NEXT_PUBLIC_L2_CHAIN_ID,
+  NEXT_PUBLIC_L1_STANDARD_BRIDGE_PROXY,
+  NEXT_PUBLIC_L2_STANDARD_BRIDGE_PROXY,
 } from "./config";
 import { truncateAddress } from "@/lib/utils";
-
+import Image from "next/image";
 export default function Bridge() {
   // React state
   const [amount, setAmount] = useState("");
   const [errorInput, setErrorInput] = useState("");
   const [isConfirmationOpen, setIsConfirmationOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("deposit");
+  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [isDisconnectOpen, setIsDisconnectOpen] = useState(false);
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [loader, setLoader] = useState(false);
+
   // Wagmi hooks
   const { address, isConnected } = useAccount();
   const { connect, connectors, error } = useConnect();
@@ -58,12 +62,23 @@ export default function Bridge() {
   });
 
   // Handlers
-  const handleConnect = () => {
-    connect({ connector: connectors[0] }); // TODO: add menu to select connector
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    setAmount("");
+  };
+
+  const handleOpenWalletModal = () => {
+    setIsWalletModalOpen(true);
+  };
+
+  const handleConnect = (connector: Connector) => {
+    connect({ connector });
+    setIsWalletModalOpen(false);
   };
 
   const handleDisconnect = () => {
     disconnect();
+    setIsDisconnectOpen(false);
   };
 
   const handleBridge = () => {
@@ -74,7 +89,6 @@ export default function Bridge() {
 
   const handleConfirm = () => {
     // Simulating bridging process
-    console.log(`${activeTab}ing ${amount} ETH`);
     setIsConfirmationOpen(false);
     if (activeTab === "deposit") {
       handleDeposit();
@@ -102,14 +116,24 @@ export default function Bridge() {
             contracts: {
               l1: opStackL1Contracts,
             },
-            bridges: bridges,
+            bridges: {
+              ETH: {
+                l1Bridge: NEXT_PUBLIC_L1_STANDARD_BRIDGE_PROXY,
+                l2Bridge: NEXT_PUBLIC_L2_STANDARD_BRIDGE_PROXY,
+                Adapter: optimismSDK.ETHBridgeAdapter,
+              },
+            },
             l1ChainId: Number(NEXT_PUBLIC_L1_CHAIN_ID),
             l2ChainId: Number(NEXT_PUBLIC_L2_CHAIN_ID),
             l1SignerOrProvider: provider,
             l2SignerOrProvider: provider,
             bedrock: true,
           });
-          const weiValue = parseInt(ethers.parseEther(amount).toString(), 16);
+          console.log({ crossChainMessenger });
+          const weiValue = parseInt(
+            ethers.utils.parseEther(amount).toString(),
+            16
+          );
           setLoader(true);
           var depositETHEREUM = await crossChainMessenger.depositETH(
             weiValue.toString()
@@ -132,10 +156,12 @@ export default function Bridge() {
     setMounted(true);
   }, []);
 
+  if (!mounted) return null;
+
+  console.log({ connectors });
+
   return (
     <div className="min-h-screen bg-background pt-16">
-      {" "}
-      {/* Added pt-16 for header space */}
       <header className="fixed top-0 left-0 right-0 bg-background z-10 shadow-sm">
         <div className="container mx-auto p-4">
           <div className="flex justify-between items-center">
@@ -152,13 +178,13 @@ export default function Bridge() {
               {isConnected ? (
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="default"
                   onClick={() => setIsDisconnectOpen(true)}
                 >
                   {truncateAddress(address)}
                 </Button>
               ) : (
-                <Button className="w-full" onClick={handleConnect}>
+                <Button className="w-full" onClick={handleOpenWalletModal}>
                   <WalletIcon className="mr-2 h-4 w-4" /> Connect Wallet
                 </Button>
               )}
@@ -166,57 +192,80 @@ export default function Bridge() {
           </div>
         </div>
       </header>
-      <main className="container mx-auto p-4 max-w-md">
+      <main className="container mx-auto p-4 max-w-md flex flex-col space-y-8">
         <Tabs defaultValue="deposit" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-2 mb-3">
             <TabsTrigger
               value="deposit"
-              onClick={() => setActiveTab("deposit")}
+              onClick={() => handleTabChange("deposit")}
             >
               Deposit
             </TabsTrigger>
             <TabsTrigger
               value="withdraw"
-              onClick={() => setActiveTab("withdraw")}
+              onClick={() => handleTabChange("withdraw")}
             >
               Withdraw
             </TabsTrigger>
           </TabsList>
           <TabsContent value="deposit">
-            <p className="text-sm text-muted-foreground mb-4">
-              Deposit ETH from Sepolia to your custom devnet.
+            <p className="text-sm text-muted-foreground">
+              Deposit ETH from Sepolia to Tohma Devnet.
             </p>
           </TabsContent>
           <TabsContent value="withdraw">
-            <p className="text-sm text-muted-foreground mb-4">
-              Withdraw ETH from your custom devnet to Sepolia.
+            <p className="text-sm text-muted-foreground">
+              Withdraw ETH from Tohma Devnet to Sepolia.
             </p>
           </TabsContent>
         </Tabs>
 
-        <div className="space-y-4 mt-4">
-          <div className="space-y-2">
-            <Label htmlFor="amount">Amount (ETH)</Label>
-            <Input
-              id="amount"
-              placeholder="0.0"
-              type="number"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-          </div>
+        <div className="space-y-3">
+          <Label htmlFor="amount">Amount (ETH)</Label>
+          <Input
+            id="amount"
+            placeholder="0.0"
+            type="number"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
+          {isConnected && (
+            <div className={`flex flex-col space-y-1`}>
+              <p className="text-sm text-muted-foreground">
+                {activeTab === "deposit" ? "Sepolia" : "Tohma"} Balance:{" "}
+                {activeTab === "deposit"
+                  ? l1Balance?.formatted ?? "0"
+                  : l2Balance?.formatted ?? "0"}{" "}
+                ETH
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {activeTab === "withdraw" ? "Sepolia" : "Tohma"} Balance:{" "}
+                {activeTab === "withdraw"
+                  ? l1Balance?.formatted ?? "0"
+                  : l2Balance?.formatted ?? "0"}{" "}
+                ETH
+              </p>
+            </div>
+          )}
+        </div>
 
+        <div>
           {!isConnected ? (
-            <Button className="w-full" onClick={handleConnect}>
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={handleOpenWalletModal}
+            >
               <WalletIcon className="mr-2 h-4 w-4" /> Connect Wallet
             </Button>
           ) : (
             <Button
               className="w-full"
+              size="lg"
               onClick={handleBridge}
               disabled={!amount}
             >
-              Bridge {activeTab === "deposit" ? "to" : "from"} Devnet
+              {activeTab === "deposit" ? "Deposit" : "Withdraw"}
             </Button>
           )}
         </div>
@@ -227,7 +276,7 @@ export default function Bridge() {
               <DialogTitle>Confirm {activeTab}</DialogTitle>
               <DialogDescription>
                 You are about to {activeTab} {amount} ETH{" "}
-                {activeTab === "deposit" ? "to" : "from"} your custom devnet.
+                {activeTab === "deposit" ? "to" : "from"} Tohma Devnet.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
@@ -259,6 +308,42 @@ export default function Bridge() {
               </Button>
               <Button onClick={handleDisconnect}>Disconnect</Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isWalletModalOpen} onOpenChange={setIsWalletModalOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Connect Wallet</DialogTitle>
+              <DialogDescription>
+                Choose a wallet provider to connect.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              {connectors.map((connector: Connector) => (
+                <Button
+                  key={connector.name}
+                  variant="outline"
+                  className="w-full flex space-x-2 justify-start"
+                  onClick={() => handleConnect(connector)}
+                >
+                  {connector.icon && (
+                    <img
+                      src={connector.icon}
+                      alt={connector.name}
+                      width={20}
+                      height={20}
+                    />
+                  )}
+                  <span>{connector.name}</span>
+                </Button>
+              ))}
+              {!connectors.length && (
+                <p className="text-sm text-muted-foreground">
+                  No connectors found.
+                </p>
+              )}
+            </div>
           </DialogContent>
         </Dialog>
       </main>
