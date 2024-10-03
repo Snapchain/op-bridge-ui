@@ -16,31 +16,54 @@ import {
 } from "@/components/ui/dialog";
 import { WalletIcon, MoonIcon, SunIcon } from "lucide-react";
 import { useTheme } from "next-themes";
+import { ethers, Provider } from "ethers";
+import optimismSDK from "@eth-optimism/sdk";
+import {
+  useAccount,
+  useConnect,
+  useBalance,
+  useSwitchChain,
+  useDisconnect,
+} from "wagmi";
+import {
+  opStackL1Contracts,
+  bridges,
+  NEXT_PUBLIC_L1_CHAIN_ID,
+  NEXT_PUBLIC_L2_CHAIN_ID,
+} from "./config";
+import { truncateAddress } from "@/lib/utils";
 
 export default function Bridge() {
+  // React state
   const [amount, setAmount] = useState("");
-  const [isConnected, setIsConnected] = useState(false);
+  const [errorInput, setErrorInput] = useState("");
   const [isConfirmationOpen, setIsConfirmationOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("deposit");
-  const [account, setAccount] = useState("");
   const [isDisconnectOpen, setIsDisconnectOpen] = useState(false);
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [loader, setLoader] = useState(false);
+  // Wagmi hooks
+  const { address, isConnected } = useAccount();
+  const { connect, connectors, error } = useConnect();
+  const { disconnect } = useDisconnect();
+  const { chains, switchChain } = useSwitchChain();
+  const { data: l1Balance } = useBalance({
+    address: address,
+    chainId: Number(NEXT_PUBLIC_L1_CHAIN_ID),
+  });
+  const { data: l2Balance } = useBalance({
+    address: address,
+    chainId: Number(NEXT_PUBLIC_L2_CHAIN_ID),
+  });
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
+  // Handlers
   const handleConnect = () => {
-    // Simulating wallet connection
-    setIsConnected(true);
-    setAccount("0x1234...5678"); // Example account
+    connect({ connector: connectors[0] }); // TODO: add menu to select connector
   };
 
   const handleDisconnect = () => {
-    setIsConnected(false);
-    setAccount("");
-    setIsDisconnectOpen(false);
+    disconnect();
   };
 
   const handleBridge = () => {
@@ -53,6 +76,11 @@ export default function Bridge() {
     // Simulating bridging process
     console.log(`${activeTab}ing ${amount} ETH`);
     setIsConfirmationOpen(false);
+    if (activeTab === "deposit") {
+      handleDeposit();
+    } else if (activeTab === "withdraw") {
+      // TODO: handle withdraw
+    }
     setAmount("");
   };
 
@@ -60,9 +88,49 @@ export default function Bridge() {
     setTheme(theme === "dark" ? "light" : "dark");
   };
 
-  if (!mounted) {
-    return null;
-  }
+  const handleDeposit = async () => {
+    try {
+      if (!amount) {
+        setErrorInput("Please enter the amount");
+      } else {
+        if (parseFloat(amount) <= 0) {
+          setErrorInput("Invalid Amount Entered!");
+        } else {
+          const provider =
+            (await connectors[0].getProvider()) as optimismSDK.SignerOrProviderLike; // TODO: generalize this
+          const crossChainMessenger = new optimismSDK.CrossChainMessenger({
+            contracts: {
+              l1: opStackL1Contracts,
+            },
+            bridges: bridges,
+            l1ChainId: Number(NEXT_PUBLIC_L1_CHAIN_ID),
+            l2ChainId: Number(NEXT_PUBLIC_L2_CHAIN_ID),
+            l1SignerOrProvider: provider,
+            l2SignerOrProvider: provider,
+            bedrock: true,
+          });
+          const weiValue = parseInt(ethers.parseEther(amount).toString(), 16);
+          setLoader(true);
+          var depositETHEREUM = await crossChainMessenger.depositETH(
+            weiValue.toString()
+          );
+          const receiptETH = await depositETHEREUM.wait();
+          if (receiptETH) {
+            setLoader(false);
+            setAmount("");
+          }
+        }
+      }
+    } catch (error) {
+      console.log(error);
+      setLoader(false);
+    }
+  };
+
+  // Use effects
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <div className="min-h-screen bg-background pt-16">
@@ -87,7 +155,7 @@ export default function Bridge() {
                   size="sm"
                   onClick={() => setIsDisconnectOpen(true)}
                 >
-                  {account}
+                  {truncateAddress(address)}
                 </Button>
               ) : (
                 <Button className="w-full" onClick={handleConnect}>
