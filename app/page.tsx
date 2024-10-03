@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,13 +17,18 @@ import {
 import { WalletIcon, MoonIcon, SunIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { ethers } from "ethers";
-import optimismSDK from "@eth-optimism/sdk";
+import {
+  CrossChainMessenger,
+  ETHBridgeAdapter,
+  type SignerOrProviderLike,
+} from "@eth-optimism/sdk";
 import {
   useAccount,
   useConnect,
   useBalance,
   useSwitchChain,
   useDisconnect,
+  useChainId,
   Connector,
 } from "wagmi";
 import {
@@ -32,9 +37,12 @@ import {
   NEXT_PUBLIC_L2_CHAIN_ID,
   NEXT_PUBLIC_L1_STANDARD_BRIDGE_PROXY,
   NEXT_PUBLIC_L2_STANDARD_BRIDGE_PROXY,
+  config,
 } from "./config";
 import { truncateAddress } from "@/lib/utils";
-import Image from "next/image";
+import { getEthersSigner } from "@/lib/ethers";
+import { getConnectorClient } from "wagmi/actions";
+
 export default function Bridge() {
   // React state
   const [amount, setAmount] = useState("");
@@ -48,7 +56,7 @@ export default function Bridge() {
   const [loader, setLoader] = useState(false);
 
   // Wagmi hooks
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, connector, chainId } = useAccount();
   const { connect, connectors, error } = useConnect();
   const { disconnect } = useDisconnect();
   const { chains, switchChain } = useSwitchChain();
@@ -109,10 +117,14 @@ export default function Bridge() {
       } else {
         if (parseFloat(amount) <= 0) {
           setErrorInput("Invalid Amount Entered!");
-        } else {
-          const provider =
-            (await connectors[0].getProvider()) as optimismSDK.SignerOrProviderLike; // TODO: generalize this
-          const crossChainMessenger = new optimismSDK.CrossChainMessenger({
+        } else if (connector) {
+          const l1Provider = await getEthersSigner(config, {
+            chainId: Number(NEXT_PUBLIC_L1_CHAIN_ID),
+          });
+          const l2Provider = await getEthersSigner(config, {
+            chainId: Number(NEXT_PUBLIC_L2_CHAIN_ID),
+          });
+          const crossChainMessenger = new CrossChainMessenger({
             contracts: {
               l1: opStackL1Contracts,
             },
@@ -120,20 +132,16 @@ export default function Bridge() {
               ETH: {
                 l1Bridge: NEXT_PUBLIC_L1_STANDARD_BRIDGE_PROXY,
                 l2Bridge: NEXT_PUBLIC_L2_STANDARD_BRIDGE_PROXY,
-                Adapter: optimismSDK.ETHBridgeAdapter,
+                Adapter: ETHBridgeAdapter,
               },
             },
             l1ChainId: Number(NEXT_PUBLIC_L1_CHAIN_ID),
             l2ChainId: Number(NEXT_PUBLIC_L2_CHAIN_ID),
-            l1SignerOrProvider: provider,
-            l2SignerOrProvider: provider,
+            l1SignerOrProvider: l1Provider,
+            l2SignerOrProvider: l2Provider,
             bedrock: true,
           });
-          console.log({ crossChainMessenger });
-          const weiValue = parseInt(
-            ethers.utils.parseEther(amount).toString(),
-            16
-          );
+          const weiValue = ethers.utils.parseEther(amount).toString();
           setLoader(true);
           var depositETHEREUM = await crossChainMessenger.depositETH(
             weiValue.toString()
@@ -143,6 +151,8 @@ export default function Bridge() {
             setLoader(false);
             setAmount("");
           }
+        } else {
+          throw new Error("Connector not found");
         }
       }
     } catch (error) {
@@ -151,14 +161,24 @@ export default function Bridge() {
     }
   };
 
+  // Use memo
+  const expectedChainId = useMemo(() => {
+    if (activeTab === "deposit") {
+      return Number(NEXT_PUBLIC_L1_CHAIN_ID);
+    } else if (activeTab === "withdraw") {
+      return Number(NEXT_PUBLIC_L2_CHAIN_ID);
+    } else {
+      return undefined;
+    }
+  }, [activeTab]);
+
   // Use effects
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  // Render UI
   if (!mounted) return null;
-
-  console.log({ connectors });
 
   return (
     <div className="min-h-screen bg-background pt-16">
@@ -258,7 +278,7 @@ export default function Bridge() {
             >
               <WalletIcon className="mr-2 h-4 w-4" /> Connect Wallet
             </Button>
-          ) : (
+          ) : chainId === expectedChainId ? (
             <Button
               className="w-full"
               size="lg"
@@ -266,6 +286,18 @@ export default function Bridge() {
               disabled={!amount}
             >
               {activeTab === "deposit" ? "Deposit" : "Withdraw"}
+            </Button>
+          ) : (
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={() =>
+                expectedChainId
+                  ? switchChain({ chainId: expectedChainId })
+                  : null
+              }
+            >
+              Switch Network
             </Button>
           )}
         </div>

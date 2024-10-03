@@ -1,6 +1,5 @@
 import { http, createConfig } from "wagmi";
 import { sepolia, optimismSepolia } from "wagmi/chains";
-import { injected, metaMask, safe, walletConnect } from "wagmi/connectors";
 import { defineChain } from "viem";
 
 const NEXT_PUBLIC_L2_RPC_URL = process.env.NEXT_PUBLIC_L2_RPC_URL as string;
