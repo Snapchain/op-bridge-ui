@@ -14,21 +14,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { WalletIcon, MoonIcon, SunIcon } from "lucide-react";
+import { WalletIcon, MoonIcon, SunIcon, Loader2 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { ethers } from "ethers";
-import {
-  CrossChainMessenger,
-  ETHBridgeAdapter,
-  type SignerOrProviderLike,
-} from "@eth-optimism/sdk";
+import { CrossChainMessenger, ETHBridgeAdapter } from "@eth-optimism/sdk";
 import {
   useAccount,
   useConnect,
   useBalance,
   useSwitchChain,
   useDisconnect,
-  useChainId,
   Connector,
 } from "wagmi";
 import {
@@ -41,8 +36,7 @@ import {
 } from "./config";
 import { truncateAddress } from "@/lib/utils";
 import { getEthersSigner } from "@/lib/ethers";
-import { getConnectorClient } from "wagmi/actions";
-
+import Image from "next/image";
 export default function Bridge() {
   // React state
   const [amount, setAmount] = useState("");
@@ -53,13 +47,13 @@ export default function Bridge() {
   const [isDisconnectOpen, setIsDisconnectOpen] = useState(false);
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const [loader, setLoader] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Wagmi hooks
   const { address, isConnected, connector, chainId } = useAccount();
-  const { connect, connectors, error } = useConnect();
+  const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
-  const { chains, switchChain } = useSwitchChain();
+  const { switchChain } = useSwitchChain();
   const { data: l1Balance } = useBalance({
     address: address,
     chainId: Number(NEXT_PUBLIC_L1_CHAIN_ID),
@@ -96,28 +90,23 @@ export default function Bridge() {
   };
 
   const handleConfirm = () => {
-    // Simulating bridging process
     setIsConfirmationOpen(false);
-    if (activeTab === "deposit") {
-      handleDeposit();
-    } else if (activeTab === "withdraw") {
-      // TODO: handle withdraw
-    }
-    setAmount("");
+    handleDepositOrWithdraw(activeTab === "deposit");
   };
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
   };
 
-  const handleDeposit = async () => {
+  const handleDepositOrWithdraw = async (isDeposit: boolean) => {
     try {
       if (!amount) {
         setErrorInput("Please enter the amount");
       } else {
         if (parseFloat(amount) <= 0) {
-          setErrorInput("Invalid Amount Entered!");
+          setErrorInput("Invalid amount");
         } else if (connector) {
+          setIsLoading(true);
           const l1Provider = await getEthersSigner(config, {
             chainId: Number(NEXT_PUBLIC_L1_CHAIN_ID),
           });
@@ -142,14 +131,14 @@ export default function Bridge() {
             bedrock: true,
           });
           const weiValue = ethers.utils.parseEther(amount).toString();
-          setLoader(true);
-          var depositETHEREUM = await crossChainMessenger.depositETH(
-            weiValue.toString()
-          );
-          const receiptETH = await depositETHEREUM.wait();
-          if (receiptETH) {
-            setLoader(false);
+          var tx = isDeposit
+            ? await crossChainMessenger.depositETH(weiValue.toString())
+            : await crossChainMessenger.withdrawETH(weiValue.toString());
+          const receipt = await tx.wait();
+          if (receipt) {
+            setIsLoading(false);
             setAmount("");
+            setErrorInput("");
           }
         } else {
           throw new Error("Connector not found");
@@ -157,7 +146,7 @@ export default function Bridge() {
       }
     } catch (error) {
       console.log(error);
-      setLoader(false);
+      setIsLoading(false);
     }
   };
 
@@ -185,7 +174,12 @@ export default function Bridge() {
       <header className="fixed top-0 left-0 right-0 bg-background z-10 shadow-sm">
         <div className="container mx-auto p-4">
           <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold">Tohma Devnet Bridge</h1>
+            <div className="flex items-center space-x-2">
+              <Image src="/icon.png" alt="Snapchain" width={32} height={32} />
+              <h1 className="hidden sm:block text-2xl font-bold">
+                Tohma Devnet Bridge
+              </h1>
+            </div>
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
                 <SunIcon className="h-4 w-4" />
@@ -205,7 +199,16 @@ export default function Bridge() {
                 </Button>
               ) : (
                 <Button className="w-full" onClick={handleOpenWalletModal}>
-                  <WalletIcon className="mr-2 h-4 w-4" /> Connect Wallet
+                  {isWalletModalOpen ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Connecting...
+                    </>
+                  ) : (
+                    <>
+                      <WalletIcon className="mr-2 h-4 w-4" /> Connect Wallet
+                    </>
+                  )}
                 </Button>
               )}
             </div>
@@ -243,6 +246,7 @@ export default function Bridge() {
         <div className="space-y-3">
           <Label htmlFor="amount">Amount (ETH)</Label>
           <Input
+            autoFocus
             id="amount"
             placeholder="0.0"
             type="number"
@@ -269,14 +273,23 @@ export default function Bridge() {
           )}
         </div>
 
-        <div>
+        <div className="flex flex-col space-y-2">
           {!isConnected ? (
             <Button
               className="w-full"
               size="lg"
               onClick={handleOpenWalletModal}
             >
-              <WalletIcon className="mr-2 h-4 w-4" /> Connect Wallet
+              {isWalletModalOpen ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Connecting...
+                </>
+              ) : (
+                <>
+                  <WalletIcon className="mr-2 h-4 w-4" /> Connect Wallet
+                </>
+              )}
             </Button>
           ) : chainId === expectedChainId ? (
             <Button
@@ -285,7 +298,14 @@ export default function Bridge() {
               onClick={handleBridge}
               disabled={!amount}
             >
-              {activeTab === "deposit" ? "Deposit" : "Withdraw"}
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {activeTab === "deposit" ? "Depositing..." : "Withdrawing..."}
+                </>
+              ) : (
+                <>{activeTab === "deposit" ? "Deposit" : "Withdraw"}</>
+              )}
             </Button>
           ) : (
             <Button
@@ -300,6 +320,7 @@ export default function Bridge() {
               Switch Network
             </Button>
           )}
+          {errorInput && <p className="text-sm text-red-500">{errorInput}</p>}
         </div>
 
         <Dialog open={isConfirmationOpen} onOpenChange={setIsConfirmationOpen}>
