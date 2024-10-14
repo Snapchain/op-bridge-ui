@@ -33,7 +33,7 @@ const useChainConfigs = () => {
       return;
     }
     setEthereumProvider(provider as EthereumProvider);
-  }, [window]);
+  }, []);
 
   useEffect(() => {
     if (!ethereumProvider) return;
