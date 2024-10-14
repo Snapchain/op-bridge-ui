@@ -32,6 +32,8 @@ import {
   NEXT_PUBLIC_L2_CHAIN_ID,
   NEXT_PUBLIC_L1_STANDARD_BRIDGE_PROXY,
   NEXT_PUBLIC_L2_STANDARD_BRIDGE_PROXY,
+  NEXT_PUBLIC_L1_CHAIN_NAME,
+  NEXT_PUBLIC_L2_CHAIN_NAME,
   config,
 } from "./config";
 import { truncateAddress } from "@/lib/utils";
@@ -53,7 +55,7 @@ export default function Bridge() {
   const { address, isConnected, connector, chainId } = useAccount();
   const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
-  const { switchChain } = useSwitchChain();
+  const { switchChain, error } = useSwitchChain();
   const { data: l1Balance } = useBalance({
     address: address,
     chainId: Number(NEXT_PUBLIC_L1_CHAIN_ID),
@@ -107,10 +109,10 @@ export default function Bridge() {
           setErrorInput("Invalid amount");
         } else if (connector) {
           setIsLoading(true);
-          const l1Provider = await getEthersSigner(config, {
+          const l1Signer = await getEthersSigner(config, {
             chainId: Number(NEXT_PUBLIC_L1_CHAIN_ID),
           });
-          const l2Provider = await getEthersSigner(config, {
+          const l2Signer = await getEthersSigner(config, {
             chainId: Number(NEXT_PUBLIC_L2_CHAIN_ID),
           });
           const crossChainMessenger = new CrossChainMessenger({
@@ -126,14 +128,21 @@ export default function Bridge() {
             },
             l1ChainId: Number(NEXT_PUBLIC_L1_CHAIN_ID),
             l2ChainId: Number(NEXT_PUBLIC_L2_CHAIN_ID),
-            l1SignerOrProvider: l1Provider,
-            l2SignerOrProvider: l2Provider,
+            l1SignerOrProvider: l1Signer,
+            l2SignerOrProvider: l2Signer,
             bedrock: true,
           });
           const weiValue = ethers.utils.parseEther(amount).toString();
           var tx = isDeposit
-            ? await crossChainMessenger.depositETH(weiValue.toString())
-            : await crossChainMessenger.withdrawETH(weiValue.toString());
+            ? await crossChainMessenger.depositETH(weiValue.toString(), {
+                recipient: address,
+                signer: l1Signer,
+              })
+            : await crossChainMessenger.withdrawETH(weiValue.toString(), {
+                recipient: address,
+                signer: l2Signer,
+              });
+          console.log({ tx });
           const receipt = await tx.wait();
           if (receipt) {
             setIsLoading(false);
@@ -177,7 +186,7 @@ export default function Bridge() {
             <div className="flex items-center space-x-2">
               <Image src="/icon.png" alt="Snapchain" width={32} height={32} />
               <h1 className="hidden sm:block text-2xl font-bold">
-                Tohma Devnet Bridge
+                {NEXT_PUBLIC_L2_CHAIN_NAME} Bridge
               </h1>
             </div>
             <div className="flex items-center space-x-4">
@@ -233,12 +242,14 @@ export default function Bridge() {
           </TabsList>
           <TabsContent value="deposit">
             <p className="text-sm text-muted-foreground">
-              Deposit ETH from Sepolia to Tohma Devnet.
+              Deposit ETH from {NEXT_PUBLIC_L1_CHAIN_NAME} to{" "}
+              {NEXT_PUBLIC_L2_CHAIN_NAME}.
             </p>
           </TabsContent>
           <TabsContent value="withdraw">
             <p className="text-sm text-muted-foreground">
-              Withdraw ETH from Tohma Devnet to Sepolia.
+              Withdraw ETH from {NEXT_PUBLIC_L2_CHAIN_NAME} to{" "}
+              {NEXT_PUBLIC_L1_CHAIN_NAME}.
             </p>
           </TabsContent>
         </Tabs>
