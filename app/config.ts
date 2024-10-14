@@ -23,6 +23,8 @@ const NEXT_PUBLIC_L2_OUTPUT_ORACLE_PROXY = process.env
   .NEXT_PUBLIC_L2_OUTPUT_ORACLE_PROXY as string;
 const NEXT_PUBLIC_DISPUTE_GAME_FACTORY_PROXY = process.env
   .NEXT_PUBLIC_DISPUTE_GAME_FACTORY_PROXY as string;
+const NEXT_PUBLIC_L1_MULTICALL3_ADDRESS = process.env
+  .NEXT_PUBLIC_L1_MULTICALL3_ADDRESS as string;
 
 if (!NEXT_PUBLIC_L1_CHAIN_NAME) {
   throw new Error("NEXT_PUBLIC_L1_CHAIN_NAME is not set");
@@ -63,6 +65,9 @@ if (!NEXT_PUBLIC_L2_STANDARD_BRIDGE_PROXY) {
 // if (!NEXT_PUBLIC_DISPUTE_GAME_FACTORY_PROXY) {
 //   throw new Error("NEXT_PUBLIC_DISPUTE_GAME_FACTORY_PROXY is not set");
 // }
+if (!NEXT_PUBLIC_L1_MULTICALL3_ADDRESS) {
+  throw new Error("NEXT_PUBLIC_L1_MULTICALL3_ADDRESS is not set");
+}
 
 const l1Chain = defineChain({
   id: Number(NEXT_PUBLIC_L1_CHAIN_ID),
@@ -79,6 +84,11 @@ const l1Chain = defineChain({
   },
   blockExplorers: {
     default: { name: "Explorer", url: NEXT_PUBLIC_L1_EXPLORER_URL },
+  },
+  contracts: {
+    multicall3: {
+      address: NEXT_PUBLIC_L1_MULTICALL3_ADDRESS as `0x${string}`,
+    },
   },
 });
 
