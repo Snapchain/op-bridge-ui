@@ -55,11 +55,11 @@ export default function Bridge() {
   const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
   const { switchChain, error } = useSwitchChain();
-  const { data: l1Balance } = useBalance({
+  const { data: l1Balance, refetch: refetchl1Balance } = useBalance({
     address: address,
     chainId: Number(NEXT_PUBLIC_L1_CHAIN_ID),
   });
-  const { data: l2Balance } = useBalance({
+  const { data: l2Balance, refetch: refetchl2Balance } = useBalance({
     address: address,
     chainId: Number(NEXT_PUBLIC_L2_CHAIN_ID),
   });
@@ -152,6 +152,8 @@ export default function Bridge() {
         setIsLoading(false);
         setAmount("");
         setErrorInput("");
+        refetchl1Balance();
+        refetchl2Balance();
       }
     } catch (error) {
       console.log(error);
@@ -175,6 +177,7 @@ export default function Bridge() {
       console.log({ account });
       // Build params for withdraw tx on L1
       const args = await publicClientL1.buildInitiateWithdrawal({
+        account,
         to: account,
         value: ethers.utils.parseEther(amount).toBigInt(),
       });
@@ -183,7 +186,7 @@ export default function Bridge() {
       // Execute withdraw tx on L2 and wait for tx be processed
       const hash = await walletClientL2.initiateWithdrawal(args);
       console.log({ hash });
-      const receipt = await publicClientL1.waitForTransactionReceipt({
+      const receipt = await publicClientL2.waitForTransactionReceipt({
         hash,
       });
       console.log({ receipt });
@@ -232,6 +235,8 @@ export default function Bridge() {
         setIsLoading(false);
         setAmount("");
         setErrorInput("");
+        refetchl1Balance();
+        refetchl2Balance();
       }
     } catch (error) {
       console.log(error);
