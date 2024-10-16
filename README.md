@@ -1,6 +1,6 @@
-# Tohma Devnet Bridge
+# OP Devnet Bridge
 
-This repo implements a simple bridging interface for depositing to and withdrawing from Tohma L2 devnet.
+This repo implements a simple bridging interface for depositing to and withdrawing from OP L2 devnet.
 
 ## Installation and setup
 

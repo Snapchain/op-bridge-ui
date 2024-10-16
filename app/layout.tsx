@@ -29,8 +29,8 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
-        <title>Tohma Devnet Interface</title>
-        <meta property="og:title" content="Tohma Devnet Bridge" />
+        <title>Snapchain OP Devnet Interface</title>
+        <meta property="og:title" content="Snapchain Devnet Bridge" />
         <meta property="og:url" content="https://tohma.bridge.snapcha.in" />
         <meta
           property="og:image"
