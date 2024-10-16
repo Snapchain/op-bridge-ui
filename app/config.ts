@@ -36,7 +36,7 @@ if (!NEXT_PUBLIC_L1_RPC_URL) {
   throw new Error("NEXT_PUBLIC_L1_RPC_URL is not set");
 }
 if (!NEXT_PUBLIC_L1_EXPLORER_URL) {
-  throw new Error("NEXT_PUBLIC_L1_EXPLORER_URL is not set");
+  console.warn("NEXT_PUBLIC_L1_EXPLORER_URL is not set");
 }
 if (!NEXT_PUBLIC_L2_CHAIN_NAME) {
   throw new Error("NEXT_PUBLIC_L2_CHAIN_NAME is not set");
@@ -48,7 +48,7 @@ if (!NEXT_PUBLIC_L2_RPC_URL) {
   throw new Error("NEXT_PUBLIC_L2_RPC_URL is not set");
 }
 if (!NEXT_PUBLIC_L2_EXPLORER_URL) {
-  throw new Error("NEXT_PUBLIC_L2_EXPLORER_URL is not set");
+  console.warn("NEXT_PUBLIC_L2_EXPLORER_URL is not set");
 }
 if (!NEXT_PUBLIC_L1_STANDARD_BRIDGE_PROXY) {
   throw new Error("NEXT_PUBLIC_L1_STANDARD_BRIDGE_PROXY is not set");
