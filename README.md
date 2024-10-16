@@ -1,36 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Tohma Devnet Bridge
 
-## Getting Started
+This repo implements a simple bridging interface for depositing to and withdrawing from Tohma L2 devnet.
 
-First, run the development server:
+## Installation and setup
+
+### Define env vars
+
+Clone `.env.example` to `.env` and set the environment variables for L1 and L2 chains.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Note `NEXT_PUBLIC_L1_MULTICALL3_ADDRESS` is set in the next step.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Installing `multicall3`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The `withdraw` call uses [`multicall3](https://github.com/mds1/multicall) to batch multiple methods in a single call.
 
-## Learn More
+To deploy the contract, first install [Foundry](https://book.getfoundry.sh/cast/):
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+curl -L https://foundry.paradigm.xyz | bash
+foundryup
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Clone the `multicall3` repo and build the contract:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+git clone https://github.com/mds1/multicall.git
+cd multicall
+forge build
+```
 
-## Deploy on Vercel
+Deploy the contract, specifying the L1 RPC URL and private key of the funded L1 deployer:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+forge create --rpc-url $L1_RPC_URL --private-key $PRIVATE_KEY Multicall3
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+If the deployment was successful, you should see a similar output as the following:
+
+```bash
+Deployer: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+Deployed to: 0x4C4a2f8c81640e47606d3fd77B353E87Ba015584
+Transaction hash: 0xe51086815a32b04b776f1959a722298e95206d63d55dfe6e84d89b0aaa40cf61
+```
+
+Set `NEXT_PUBLIC_L1_MULTICALL3_ADDRESS` in `.env` to the address of the deployed contract.
+
+### Starting the bridging app.
+
+Install dependencies and run the development server.
+
+```bash
+yarn install
+yarn dev
+```
+
+To build and run the app:
+
+```bash
+yarn build
+yarn start
+```

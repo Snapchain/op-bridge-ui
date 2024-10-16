@@ -17,7 +17,6 @@ import {
 import { WalletIcon, MoonIcon, SunIcon, Loader2 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { ethers } from "ethers";
-import { CrossChainMessenger, ETHBridgeAdapter } from "@eth-optimism/sdk";
 import {
   useAccount,
   useConnect,
@@ -27,18 +26,16 @@ import {
   Connector,
 } from "wagmi";
 import {
-  opStackL1Contracts,
   NEXT_PUBLIC_L1_CHAIN_ID,
   NEXT_PUBLIC_L2_CHAIN_ID,
-  NEXT_PUBLIC_L1_STANDARD_BRIDGE_PROXY,
-  NEXT_PUBLIC_L2_STANDARD_BRIDGE_PROXY,
   NEXT_PUBLIC_L1_CHAIN_NAME,
   NEXT_PUBLIC_L2_CHAIN_NAME,
-  config,
+  l2Chain,
 } from "./config";
+import useChainConfigs from "../hooks/useChainConfigs";
 import { truncateAddress } from "@/lib/utils";
-import { getEthersSigner } from "@/lib/ethers";
 import Image from "next/image";
+import { getL2TransactionHashes } from "viem/op-stack";
 export default function Bridge() {
   // React state
   const [amount, setAmount] = useState("");
@@ -55,15 +52,17 @@ export default function Bridge() {
   const { address, isConnected, connector, chainId } = useAccount();
   const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
-  const { switchChain, error } = useSwitchChain();
-  const { data: l1Balance } = useBalance({
+  const { switchChain } = useSwitchChain();
+  const { data: l1Balance, refetch: refetchl1Balance } = useBalance({
     address: address,
     chainId: Number(NEXT_PUBLIC_L1_CHAIN_ID),
   });
-  const { data: l2Balance } = useBalance({
+  const { data: l2Balance, refetch: refetchl2Balance } = useBalance({
     address: address,
     chainId: Number(NEXT_PUBLIC_L2_CHAIN_ID),
   });
+  const { publicClientL1, publicClientL2, walletClientL1, walletClientL2 } =
+    useChainConfigs();
 
   // Handlers
   const handleTabChange = (tab: string) => {
@@ -93,69 +92,152 @@ export default function Bridge() {
 
   const handleConfirm = () => {
     setIsConfirmationOpen(false);
-    handleDepositOrWithdraw(activeTab === "deposit");
+    if (activeTab === "deposit") {
+      handleDeposit();
+    } else {
+      handleWithdraw();
+    }
   };
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
   };
 
-  const handleDepositOrWithdraw = async (isDeposit: boolean) => {
+  const handleDeposit = async () => {
     try {
-      if (!amount) {
-        setErrorInput("Please enter the amount");
-      } else {
-        if (parseFloat(amount) <= 0) {
-          setErrorInput("Invalid amount");
-        } else if (connector) {
-          setIsLoading(true);
-          const l1Signer = await getEthersSigner(config, {
-            chainId: Number(NEXT_PUBLIC_L1_CHAIN_ID),
-          });
-          const l2Signer = await getEthersSigner(config, {
-            chainId: Number(NEXT_PUBLIC_L2_CHAIN_ID),
-          });
-          const crossChainMessenger = new CrossChainMessenger({
-            contracts: {
-              l1: opStackL1Contracts,
-            },
-            bridges: {
-              ETH: {
-                l1Bridge: NEXT_PUBLIC_L1_STANDARD_BRIDGE_PROXY,
-                l2Bridge: NEXT_PUBLIC_L2_STANDARD_BRIDGE_PROXY,
-                Adapter: ETHBridgeAdapter,
-              },
-            },
-            l1ChainId: Number(NEXT_PUBLIC_L1_CHAIN_ID),
-            l2ChainId: Number(NEXT_PUBLIC_L2_CHAIN_ID),
-            l1SignerOrProvider: l1Signer,
-            l2SignerOrProvider: l2Signer,
-            bedrock: true,
-          });
-          const weiValue = ethers.utils.parseEther(amount).toString();
-          var tx = isDeposit
-            ? await crossChainMessenger.depositETH(weiValue.toString(), {
-                recipient: address,
-                signer: l1Signer,
-              })
-            : await crossChainMessenger.withdrawETH(weiValue.toString(), {
-                recipient: address,
-                signer: l2Signer,
-              });
-          console.log({ tx });
-          const receipt = await tx.wait();
-          if (receipt) {
-            setIsLoading(false);
-            setAmount("");
-            setErrorInput("");
-          }
-        } else {
-          throw new Error("Connector not found");
-        }
+      if (!amount || parseFloat(amount) <= 0) {
+        setErrorInput("Invalid amount");
+        return;
+      }
+      if (!connector || !address) {
+        setErrorInput("Please connect your wallet");
+        return;
+      }
+      if (!publicClientL2) {
+        setErrorInput("L2 client not found");
+        return;
+      }
+      setIsLoading(true);
+      const [account] = await window.ethereum.request({
+        method: "eth_requestAccounts",
+      });
+      console.log({ account });
+      // Build params for deposit (bridge) tx on L2
+      const args = await publicClientL2.buildDepositTransaction({
+        account,
+        mint: ethers.utils.parseEther(amount).toBigInt(),
+        to: account,
+      });
+      console.log({ args });
+
+      // Execute deposit tx on L2 and wait for tx be processed
+      const hash = await walletClientL1.depositTransaction(args);
+      console.log({ hash });
+      const receipt = await publicClientL1.waitForTransactionReceipt({
+        hash,
+      });
+      console.log({ receipt });
+
+      // get l2 tx hashes from l1 tx receipt and wait for l2 tx to be processed
+      const [l2Hash] = getL2TransactionHashes(receipt);
+      console.log({ l2Hash });
+      const l2Receipt = await publicClientL2.waitForTransactionReceipt({
+        hash: l2Hash,
+      });
+      console.log({ l2Receipt });
+      // set state once tx processed
+      if (l2Receipt) {
+        setIsLoading(false);
+        setAmount("");
+        setErrorInput("");
+        refetchl1Balance();
+        refetchl2Balance();
       }
     } catch (error) {
       console.log(error);
       setIsLoading(false);
+    }
+  };
+
+  const handleWithdraw = async () => {
+    try {
+      if (!amount || parseFloat(amount) <= 0) {
+        setErrorInput("Invalid amount");
+        return;
+      }
+      if (!address || !connector) {
+        setErrorInput("Please connect your wallet");
+        return;
+      }
+      const [account] = await window.ethereum.request({
+        method: "eth_requestAccounts",
+      });
+      console.log({ account });
+      // Build params for withdraw tx on L1
+      const args = await publicClientL1.buildInitiateWithdrawal({
+        account,
+        to: account,
+        value: ethers.utils.parseEther(amount).toBigInt(),
+      });
+      console.log({ args });
+
+      // Execute withdraw tx on L2 and wait for tx be processed
+      const hash = await walletClientL2.initiateWithdrawal(args);
+      console.log({ hash });
+      const receipt = await publicClientL2.waitForTransactionReceipt({
+        hash,
+      });
+      console.log({ receipt });
+
+      // Wait until the withdrawal tx is ready to prove
+      const { output, withdrawal } = await publicClientL1.waitToProve({
+        receipt,
+        targetChain: l2Chain,
+      });
+
+      // Prove the withdrawal tx on L2
+      const proveArgs = await publicClientL2.buildProveWithdrawal({
+        output,
+        withdrawal,
+      });
+      console.log({ proveArgs });
+      const proveHash = await walletClientL1.proveWithdrawal({
+        ...proveArgs,
+        authorizationList: [],
+        account,
+      });
+      const proveReceipt = await publicClientL1.waitForTransactionReceipt({
+        hash: proveHash,
+      });
+      console.log({ proveReceipt });
+
+      // Wait until the withdrawal tx is ready to finalize
+      // TODO: create UI to show the progress and allow user to refresh the page or return at later time
+      await publicClientL1.waitToFinalize({
+        targetChain: l2Chain,
+        withdrawalHash: withdrawal.withdrawalHash,
+      });
+
+      // Finalize the withdrawal
+      const finalizeHash = await walletClientL1.finalizeWithdrawal({
+        targetChain: l2Chain,
+        withdrawal,
+        authorizationList: [],
+        account,
+      });
+      const finalizeReceipt = await publicClientL1.waitForTransactionReceipt({
+        hash: finalizeHash,
+      });
+      console.log({ finalizeReceipt });
+      if (finalizeReceipt) {
+        setIsLoading(false);
+        setAmount("");
+        setErrorInput("");
+        refetchl1Balance();
+        refetchl2Balance();
+      }
+    } catch (error) {
+      console.log(error);
     }
   };
 

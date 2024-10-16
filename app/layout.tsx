@@ -3,8 +3,8 @@
 import localFont from "next/font/local";
 import "./globals.css";
 import { ThemeProvider } from "@/providers/theme-provider";
-import { config } from "./config";
 import { WagmiProvider } from "wagmi";
+import { config } from "./config";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const geistSans = localFont({
@@ -57,18 +57,20 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <WagmiProvider config={config}>
-          <QueryClientProvider client={queryClient}>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="system"
-              enableSystem
-              disableTransitionOnChange
-            >
-              {children}
-            </ThemeProvider>
-          </QueryClientProvider>
-        </WagmiProvider>
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            {config ? (
+              <WagmiProvider config={config}>{children}</WagmiProvider>
+            ) : (
+              children
+            )}
+          </ThemeProvider>
+        </QueryClientProvider>
       </body>
     </html>
   );
