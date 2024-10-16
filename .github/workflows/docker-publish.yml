@@ -14,8 +14,8 @@ on:
 env:
   # Use docker.io for Docker Hub if empty
   REGISTRY: docker.io
-  # github.repository as <account>/<repo>
-  IMAGE_NAME: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ github.repository_name }}
+  # Remove the slash at the end of the username
+  IMAGE_NAME: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ github.event.repository.name }}
 
 jobs:
   build:
