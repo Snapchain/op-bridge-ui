@@ -16,7 +16,7 @@ Note `NEXT_PUBLIC_L1_MULTICALL3_ADDRESS` is set in the next step.
 
 ### Installing `multicall3`
 
-The `withdraw` call uses [`multicall3](https://github.com/mds1/multicall) to batch multiple methods in a single call.
+The `withdraw` call uses [`multicall3`](https://github.com/mds1/multicall) to batch multiple methods in a single call.
 
 To deploy the contract, first install [Foundry](https://book.getfoundry.sh/cast/):
 
