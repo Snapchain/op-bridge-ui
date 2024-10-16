@@ -19,5 +19,7 @@ RUN yarn install
 # Expose the port the app runs on
 EXPOSE 3000
 
-# Start the application
-CMD ["yarn", "start"]
+# Set up entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
