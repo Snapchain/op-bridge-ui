@@ -13,7 +13,7 @@ RUN yarn install --frozen-lockfile
 # Copy the rest of the application code
 COPY . .
 
-# Build the Next.js application
+# Install dependencies
 RUN yarn install
 
 # Expose the port the app runs on
