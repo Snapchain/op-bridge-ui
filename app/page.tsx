@@ -30,14 +30,12 @@ import {
   NEXT_PUBLIC_L2_CHAIN_ID,
   NEXT_PUBLIC_L1_CHAIN_NAME,
   NEXT_PUBLIC_L2_CHAIN_NAME,
-  l1Chain,
   l2Chain,
 } from "./config";
 import useChainConfigs from "../hooks/useChainConfigs";
 import { truncateAddress } from "@/lib/utils";
 import Image from "next/image";
 import { getL2TransactionHashes } from "viem/op-stack";
-import { Chain } from "viem";
 export default function Bridge() {
   // React state
   const [amount, setAmount] = useState("");
@@ -54,7 +52,7 @@ export default function Bridge() {
   const { address, isConnected, connector, chainId } = useAccount();
   const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
-  const { switchChain, error } = useSwitchChain();
+  const { switchChain } = useSwitchChain();
   const { data: l1Balance, refetch: refetchl1Balance } = useBalance({
     address: address,
     chainId: Number(NEXT_PUBLIC_L1_CHAIN_ID),
