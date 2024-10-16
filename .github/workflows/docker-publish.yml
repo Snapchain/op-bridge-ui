@@ -7,7 +7,7 @@ name: Docker
 
 on:
   push:
-    branches: [ "main", "feat/migrate-sdk-to-viem" ]
+    branches: [ "main", "chore/ci" ]
     # Publish semver tags as releases.
     tags: [ 'v*.*.*' ]
 
