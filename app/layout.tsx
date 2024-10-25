@@ -12,7 +12,7 @@ const inter = Inter({
 const title = "Tohma Devnet Bridge";
 const description = "Bridge assets to Tohma Devnet from Sepolia";
 const url = "https://tohma.bridge.snapcha.in";
-const imageUrl = "/logo-card.png";
+const imageUrl = `${url}/logo-card.png`;
 
 export const metadata: Metadata = {
   title,
