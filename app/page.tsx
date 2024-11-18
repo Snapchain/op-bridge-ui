@@ -36,6 +36,9 @@ import useChainConfigs from "../hooks/useChainConfigs";
 import { truncateAddress } from "@/lib/utils";
 import Image from "next/image";
 import { getL2TransactionHashes } from "viem/op-stack";
+import { db, WithdrawState, WithdrawStatus } from "@/store/dexie/db";
+import WithdrawTxStatus from "@/components/WithdrawTxStatus";
+
 export default function Bridge() {
   // React state
   const [amount, setAmount] = useState("");
@@ -47,6 +50,12 @@ export default function Bridge() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [withdrawStatus, setWithdrawStatus] = useState<WithdrawStatus | null>(
+    null
+  );
+  const [withdrawData, setWithdrawData] = useState<WithdrawState | null>(null);
+  const [popupTitle, setPopupTitle] = useState("");
+  const [popupDescription, setPopupDescription] = useState("");
 
   // Wagmi hooks
   const { address, isConnected, connector, chainId } = useAccount();
@@ -152,6 +161,8 @@ export default function Bridge() {
         setErrorInput("");
         refetchl1Balance();
         refetchl2Balance();
+        setPopupTitle("Deposit successful");
+        setPopupDescription("Refresh the page to view your updated balance.");
       }
     } catch (error) {
       console.log(error);
@@ -159,87 +170,444 @@ export default function Bridge() {
     }
   };
 
+  const handleWithdrawInitiate = async () => {
+    console.log("handleWithdrawInitiate");
+    const [account] = await window.ethereum.request({
+      method: "eth_requestAccounts",
+    });
+    console.log({ account });
+    // Build params for withdraw tx on L1
+    const args = await publicClientL1.buildInitiateWithdrawal({
+      account,
+      to: account,
+      value: ethers.utils.parseEther(amount).toBigInt(),
+    });
+    console.log({ args });
+
+    // Execute withdraw tx on L2 and wait for tx be processed
+    const hash = await walletClientL2.initiateWithdrawal(args);
+
+    // Store to local db
+    const withdraw = {
+      withdrawalHash: hash,
+      address: account,
+      status: "initiating" as WithdrawStatus,
+      args,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    db.withdraws.add(withdraw);
+
+    setWithdrawData(withdraw);
+    setWithdrawStatus("initiating");
+  };
+
+  const handleWithdrawAddInitiateReceipt = async () => {
+    console.log("handleWithdrawAddInitiateReceipt");
+    if (!withdrawData || !withdrawData.withdrawalHash) {
+      console.log("Failed to initiate withdrawal, missing tx hash");
+      setErrorInput("Failed to initiate withdrawal, missing tx hash");
+      return;
+    }
+    const receipt = await publicClientL2.waitForTransactionReceipt({
+      hash: withdrawData.withdrawalHash,
+    });
+    console.log({ receipt });
+
+    db.withdraws
+      .where("withdrawalHash")
+      .equals(withdrawData.withdrawalHash)
+      .modify({
+        status: "initiated",
+        withdrawalReceipt: receipt,
+        updatedAt: new Date(),
+      });
+
+    setWithdrawStatus("initiated");
+    setWithdrawData({
+      ...withdrawData,
+      status: "initiated",
+      withdrawalReceipt: receipt,
+      updatedAt: new Date(),
+    });
+    setPopupTitle("Waiting to prove");
+    setPopupDescription(
+      "Withdrawal initiated. Check back once the tx is ready to prove to continue."
+    );
+  };
+
+  const handleWithdrawWaitTillReadyToProve = async () => {
+    console.log("handleWithdrawWaitTillReadyToProve");
+    if (
+      !withdrawData ||
+      !withdrawData.withdrawalHash ||
+      !withdrawData.withdrawalReceipt
+    ) {
+      console.log(
+        "Failed while waiting for withdrawal to be ready to prove, missing tx hash or receipt"
+      );
+      setErrorInput(
+        "Failed while waiting for withdrawal to be ready to prove, missing tx hash orreceipt"
+      );
+      return;
+    }
+    const { output, withdrawal } = await publicClientL1.waitToProve({
+      receipt: withdrawData.withdrawalReceipt,
+      targetChain: l2Chain,
+    });
+    console.log({ output, withdrawal });
+
+    db.withdraws
+      .where("withdrawalHash")
+      .equals(withdrawData.withdrawalHash)
+      .modify({
+        status: "ready_to_prove",
+        output: output,
+        withdrawal: withdrawal,
+        updatedAt: new Date(),
+      });
+
+    setWithdrawStatus("ready_to_prove");
+    setWithdrawData({
+      ...withdrawData,
+      status: "ready_to_prove",
+      output: output,
+      withdrawal: withdrawal,
+      updatedAt: new Date(),
+    });
+  };
+
+  const handleWithdrawProve = async () => {
+    console.log("handleWithdrawProve");
+    if (
+      !withdrawData ||
+      !withdrawData.withdrawalHash ||
+      !withdrawData.output ||
+      !withdrawData.withdrawal
+    ) {
+      console.log(
+        "Failed to prove withdrawal, missing tx hash, output or withdrawal data"
+      );
+      setErrorInput(
+        "Failed to prove withdrawal, missing tx hash, output or withdrawal data"
+      );
+      return;
+    }
+    const proveArgs = await publicClientL2.buildProveWithdrawal({
+      output: withdrawData.output,
+      withdrawal: withdrawData.withdrawal,
+    });
+    console.log({ proveArgs });
+
+    const [account] = await window.ethereum.request({
+      method: "eth_requestAccounts",
+    });
+
+    // request switch to L1
+    await switchChain({
+      chainId: Number(NEXT_PUBLIC_L1_CHAIN_ID),
+    });
+
+    const proveHash = await walletClientL1.proveWithdrawal({
+      ...proveArgs,
+      authorizationList: [],
+      account,
+    });
+    console.log({ proveHash });
+
+    db.withdraws
+      .where("withdrawalHash")
+      .equals(withdrawData.withdrawalHash)
+      .modify({
+        status: "proving",
+        proveArgs: proveArgs,
+        proveHash: proveHash,
+        updatedAt: new Date(),
+      });
+
+    setWithdrawStatus("proving");
+
+    setWithdrawData({
+      ...withdrawData,
+      status: "proving",
+      proveArgs: proveArgs,
+      proveHash: proveHash,
+      updatedAt: new Date(),
+    });
+  };
+
+  const handleWithdrawAddProveReceipt = async () => {
+    console.log("handleWithdrawAddProveReceipt");
+    if (
+      !withdrawData ||
+      !withdrawData.withdrawalHash ||
+      !withdrawData.proveHash
+    ) {
+      console.log(
+        "Failed to add prove receipt, missing withdraw or proving tx hash"
+      );
+      setErrorInput(
+        "Failed to add prove receipt, missing withdraw or proving tx hash"
+      );
+      return;
+    }
+    const proveReceipt = await publicClientL1.waitForTransactionReceipt({
+      hash: withdrawData.proveHash,
+    });
+    console.log({ proveReceipt });
+
+    db.withdraws
+      .where("withdrawalHash")
+      .equals(withdrawData.withdrawalHash)
+      .modify({
+        status: "proved",
+        proveReceipt: proveReceipt,
+        updatedAt: new Date(),
+      });
+
+    setWithdrawStatus("proved");
+    setWithdrawData({
+      ...withdrawData,
+      status: "proved",
+      proveReceipt: proveReceipt,
+      updatedAt: new Date(),
+    });
+  };
+
+  const handleWithdrawFinalize = async () => {
+    console.log("handleWithdrawFinalize");
+    if (
+      !withdrawData ||
+      !withdrawData.withdrawalHash ||
+      !withdrawData.withdrawal
+    ) {
+      console.log(
+        "Failed to finalize withdrawal, missing tx hash or withdrawal data"
+      );
+      setErrorInput(
+        "Failed to finalize withdrawal, missing tx hash or withdrawal data"
+      );
+      return;
+    }
+    // request switch to L1
+    await switchChain({
+      chainId: Number(NEXT_PUBLIC_L1_CHAIN_ID),
+    });
+    // Wait until the withdrawal tx is ready to finalize
+    const isReadyToFinalize = await publicClientL1.waitToFinalize({
+      targetChain: l2Chain,
+      withdrawalHash: withdrawData.withdrawalHash,
+    });
+    console.log({ isReadyToFinalize });
+    const [account] = await window.ethereum.request({
+      method: "eth_requestAccounts",
+    });
+
+    // Finalize the withdrawal
+    const finalizeHash = await walletClientL1.finalizeWithdrawal({
+      targetChain: l2Chain,
+      withdrawal: withdrawData.withdrawal,
+      authorizationList: [],
+      account,
+    });
+    console.log({ finalizeHash });
+
+    db.withdraws
+      .where("withdrawalHash")
+      .equals(withdrawData.withdrawalHash)
+      .modify({
+        status: "finalizing",
+        finalizeHash: finalizeHash,
+        updatedAt: new Date(),
+      });
+
+    setWithdrawStatus("finalizing");
+
+    setWithdrawData({
+      ...withdrawData,
+      status: "finalizing",
+      finalizeHash: finalizeHash,
+      updatedAt: new Date(),
+    });
+  };
+
+  const handleWithdrawAddFinalizeReceipt = async () => {
+    console.log("handleWithdrawAddFinalizeReceipt");
+    if (
+      !withdrawData ||
+      !withdrawData.withdrawalHash ||
+      !withdrawData.finalizeHash
+    ) {
+      console.log(
+        "Failed to add finalize receipt, missing withdraw or finalizing tx hash"
+      );
+      setErrorInput(
+        "Failed to add finalize receipt, missing withdraw or finalizing tx hash"
+      );
+      return;
+    }
+
+    const finalizeReceipt = await publicClientL1.waitForTransactionReceipt({
+      hash: withdrawData.finalizeHash,
+    });
+    console.log({ finalizeReceipt });
+
+    db.withdraws
+      .where("withdrawalHash")
+      .equals(withdrawData.withdrawalHash)
+      .modify({
+        status: "finalized",
+        finalizeReceipt: finalizeReceipt,
+        updatedAt: new Date(),
+      });
+
+    setWithdrawStatus("finalized");
+
+    setWithdrawData({
+      ...withdrawData,
+      status: "finalized",
+      finalizeReceipt: finalizeReceipt,
+      updatedAt: new Date(),
+    });
+  };
+
+  const resumeWithdraw = async () => {
+    if (!address) {
+      return {
+        withdrawStatus: null,
+        withdrawData: null,
+        withdrawAmount: null,
+      };
+    }
+    const withdraws = await db.withdraws.toArray();
+    // filter for withdraw from connected account
+    const withdrawsForAddress = withdraws.filter(
+      (withdraw) =>
+        withdraw.address.toLowerCase() === address.toLowerCase() &&
+        withdraw.status !== "finalized"
+    );
+    console.log({ withdrawsForAddress });
+    if (withdrawsForAddress.length > 0) {
+      console.log("resuming withdraw");
+      setPopupTitle("Resuming withdraw");
+      setPopupDescription(
+        `Resuming withdraw tx ${truncateAddress(
+          withdrawsForAddress[0].withdrawalHash as `0x${string}`
+        )} (status: ${withdrawsForAddress[0].status})`
+      );
+      setWithdrawStatus(withdrawsForAddress[0].status);
+      setWithdrawData(withdrawsForAddress[0]);
+      const withdrawAmount = ethers.utils.formatEther(
+        withdrawsForAddress[0].args.request.value
+      );
+      setAmount(withdrawAmount);
+      return {
+        withdrawStatus: withdrawsForAddress[0].status,
+        withdrawData: withdrawsForAddress[0],
+        withdrawAmount,
+      };
+    } else {
+      console.log("no withdraws found for address");
+      return {
+        withdrawStatus: null,
+        withdrawData: null,
+        withdrawAmount: null,
+      };
+    }
+  };
+
+  useEffect(() => {
+    const asyncResumeWithdraw = async () => {
+      if (!address || !connector) {
+        return;
+      }
+      if (activeTab === "withdraw") {
+        await resumeWithdraw();
+      }
+    };
+    asyncResumeWithdraw();
+  }, [address, connector, activeTab]);
+
+  console.log({ withdrawStatus, withdrawData });
+
   const handleWithdraw = async () => {
+    console.log("handleWithdraw", { amount });
     try {
       if (!amount || parseFloat(amount) <= 0) {
+        console.log("Invalid amount");
         setErrorInput("Invalid amount");
         return;
       }
       if (!address || !connector) {
+        console.log("Please connect your wallet");
         setErrorInput("Please connect your wallet");
         return;
       }
-      const [account] = await window.ethereum.request({
-        method: "eth_requestAccounts",
-      });
-      console.log({ account });
-      // Build params for withdraw tx on L1
-      const args = await publicClientL1.buildInitiateWithdrawal({
-        account,
-        to: account,
-        value: ethers.utils.parseEther(amount).toBigInt(),
-      });
-      console.log({ args });
 
-      // Execute withdraw tx on L2 and wait for tx be processed
-      const hash = await walletClientL2.initiateWithdrawal(args);
-      console.log({ hash });
-      const receipt = await publicClientL2.waitForTransactionReceipt({
-        hash,
-      });
-      console.log({ receipt });
+      setIsLoading(true);
+
+      // Initiate
+      if (withdrawStatus === null) {
+        await handleWithdrawInitiate();
+      }
+
+      if (withdrawStatus === "initiating") {
+        await handleWithdrawAddInitiateReceipt();
+      }
+
+      if (!withdrawData || !withdrawData.withdrawalHash) {
+        console.log("No withdraw data found");
+        return;
+      }
 
       // Wait until the withdrawal tx is ready to prove
-      const { output, withdrawal } = await publicClientL1.waitToProve({
-        receipt,
-        targetChain: l2Chain,
-      });
+      if (withdrawStatus === "initiated") {
+        await handleWithdrawWaitTillReadyToProve();
+      }
 
       // Prove the withdrawal tx on L2
-      const proveArgs = await publicClientL2.buildProveWithdrawal({
-        output,
-        withdrawal,
-      });
-      console.log({ proveArgs });
-      const proveHash = await walletClientL1.proveWithdrawal({
-        ...proveArgs,
-        authorizationList: [],
-        account,
-      });
-      const proveReceipt = await publicClientL1.waitForTransactionReceipt({
-        hash: proveHash,
-      });
-      console.log({ proveReceipt });
+      if (withdrawStatus === "ready_to_prove") {
+        await handleWithdrawProve();
+      }
 
-      // Wait until the withdrawal tx is ready to finalize
-      // TODO: create UI to show the progress and allow user to refresh the page or return at later time
-      await publicClientL1.waitToFinalize({
-        targetChain: l2Chain,
-        withdrawalHash: withdrawal.withdrawalHash,
-      });
+      if (withdrawStatus === "proving") {
+        await handleWithdrawAddProveReceipt();
+      }
 
-      // Finalize the withdrawal
-      const finalizeHash = await walletClientL1.finalizeWithdrawal({
-        targetChain: l2Chain,
-        withdrawal,
-        authorizationList: [],
-        account,
-      });
-      const finalizeReceipt = await publicClientL1.waitForTransactionReceipt({
-        hash: finalizeHash,
-      });
-      console.log({ finalizeReceipt });
-      if (finalizeReceipt) {
+      if (withdrawStatus === "proved") {
+        await handleWithdrawFinalize();
+      }
+
+      if (withdrawStatus === "finalizing") {
+        await handleWithdrawAddFinalizeReceipt();
+      }
+
+      if (withdrawStatus === "finalized") {
+        setPopupTitle("Withdraw finalized");
+        setPopupDescription("Refresh the page to view your updated balance.");
         setIsLoading(false);
+        db.withdraws
+          .where("withdrawalHash")
+          .equals(withdrawData.withdrawalHash)
+          .delete();
         setAmount("");
         setErrorInput("");
         refetchl1Balance();
         refetchl2Balance();
+        setWithdrawStatus(null);
+        setWithdrawData(null);
       }
     } catch (error) {
       console.log(error);
     }
   };
+
+  // Resume withdraw and trigger handleWithdraw() again whenever the withdraw status updates
+  useEffect(() => {
+    if (withdrawStatus !== null && withdrawData !== null && !!amount) {
+      handleWithdraw();
+    }
+  }, [withdrawStatus, withdrawData, amount]);
 
   // Use memo
   const expectedChainId = useMemo(() => {
@@ -345,6 +713,7 @@ export default function Bridge() {
             type="number"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
+            disabled={activeTab === "withdraw" && withdrawStatus !== null}
           />
           {isConnected && (
             <div className={`flex flex-col space-y-1`}>
@@ -414,6 +783,16 @@ export default function Bridge() {
             </Button>
           )}
           {errorInput && <p className="text-sm text-red-500">{errorInput}</p>}
+          <div className="pt-6">
+            {withdrawStatus && (
+              <WithdrawTxStatus
+                currentStep={withdrawStatus}
+                withdrawalHash={withdrawData?.withdrawalHash}
+                proveHash={withdrawData?.proveHash}
+                finalizeHash={withdrawData?.finalizeHash}
+              />
+            )}
+          </div>
         </div>
 
         <Dialog open={isConfirmationOpen} onOpenChange={setIsConfirmationOpen}>
@@ -490,6 +869,26 @@ export default function Bridge() {
                 </p>
               )}
             </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={!!popupTitle} onOpenChange={() => setPopupTitle("")}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{popupTitle}</DialogTitle>
+              <DialogDescription>{popupDescription}</DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setPopupTitle("");
+                  setPopupDescription("");
+                }}
+              >
+                Close
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </main>
