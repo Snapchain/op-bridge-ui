@@ -230,10 +230,8 @@ export default function Bridge() {
       withdrawalReceipt: receipt,
       updatedAt: new Date(),
     });
-    setPopupTitle("Waiting to prove");
-    setPopupDescription(
-      "Withdrawal initiated. Check back once the tx is ready to prove to continue."
-    );
+    setPopupTitle("Withdraw initiated");
+    setPopupDescription("Check back in ~1 hour once tx is ready to prove.");
   };
 
   const handleWithdrawWaitTillReadyToProve = async () => {
@@ -402,6 +400,10 @@ export default function Bridge() {
     const [account] = await window.ethereum.request({
       method: "eth_requestAccounts",
     });
+
+    // Here, we need to wait for a while as `waitToFinalize` is not reliable
+    // Sleep for 20 seconds
+    await new Promise((resolve) => setTimeout(resolve, 20000));
 
     // Finalize the withdrawal
     const finalizeHash = await walletClientL1.finalizeWithdrawal({
@@ -586,10 +588,6 @@ export default function Bridge() {
         setPopupTitle("Withdraw finalized");
         setPopupDescription("Refresh the page to view your updated balance.");
         setIsLoading(false);
-        db.withdraws
-          .where("withdrawalHash")
-          .equals(withdrawData.withdrawalHash)
-          .delete();
         setAmount("");
         setErrorInput("");
         refetchl1Balance();
