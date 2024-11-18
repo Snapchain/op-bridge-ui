@@ -55,7 +55,7 @@ export default function WithdrawTxStatus({
 
   return (
     <div className="w-full max-w-md mx-auto border border-neutral-200 dark:border-neutral-700 rounded-lg p-5">
-      <div className="space-y-3 relative">
+      <div className="space-y-4 relative">
         {steps.map((step, index) => {
           const stepIndex = getCurrentStepIndex();
           let status: "completed" | "current" | "upcoming" = "upcoming";
@@ -67,28 +67,28 @@ export default function WithdrawTxStatus({
           }
 
           return (
-            <div key={step.name} className="flex items-center space-x-3">
+            <div key={step.name} className="flex items-center space-x-4">
               <div className="relative">
                 <div
                   className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
                     status === "completed"
                       ? "bg-primary text-primary-foreground"
                       : status === "current"
-                      ? "bg-secondary text-secondary-foreground"
+                      ? "bg-none text-secondary-foreground"
                       : "bg-muted text-muted-foreground"
                   }`}
                 >
                   {status === "completed" ? (
                     <Check className="w-3 h-3 stroke-[3]" />
                   ) : status === "current" ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-5 h-5 animate-spin" />
                   ) : null}
                 </div>
                 {index < steps.length - 1 && (
                   <div className="absolute left-1/2 top-6 bottom-0 w-0.5 -ml-px bg-border" />
                 )}
               </div>
-              <div className="flex-grow pt-1">
+              <div className="flex-grow">
                 <p
                   className={`text-sm font-medium ${
                     status === "completed"
