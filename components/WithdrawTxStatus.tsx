@@ -54,7 +54,7 @@ export default function WithdrawTxStatus({
     steps.findIndex((step) => step.name === currentStep);
 
   return (
-    <div className="w-full max-w-md mx-auto border border-neutral-200 dark:border-neutral-700 rounded-lg p-5">
+    <div className="w-full max-w-md mx-auto border border-neutral-200 dark:border-neutral-700 rounded-lg px-5 py-4">
       <div className="space-y-4 relative">
         {steps.map((step, index) => {
           const stepIndex = getCurrentStepIndex();
