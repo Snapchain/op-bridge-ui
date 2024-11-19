@@ -431,6 +431,9 @@ export default function Bridge() {
         method: "eth_requestAccounts",
       });
 
+      // waitToFinalize is buggy, so add a delay to wait before finalizing tx
+      await new Promise((resolve) => setTimeout(resolve, 20000));
+
       // Finalize the withdrawal
       const finalizeHash = await walletClientL1.finalizeWithdrawal({
         targetChain: l2Chain,
