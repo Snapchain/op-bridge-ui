@@ -264,7 +264,7 @@ export default function Bridge() {
     });
     setPopupTitle("Withdraw initiated");
     setPopupDescription(
-      "Check back in ~1 hour once the transaction is ready to prove. To withdraw funds on L1, you will need to prove that the withdraw request was included in an L2 block."
+      "To withdraw funds on L1, you will need to prove that the withdraw request was included in an L2 block. Check back in ~1 hour once the transaction is ready to prove."
     );
   };
 
@@ -431,8 +431,9 @@ export default function Bridge() {
         method: "eth_requestAccounts",
       });
 
-      // waitToFinalize is buggy, so add a delay to wait before finalizing tx
-      await new Promise((resolve) => setTimeout(resolve, 20000));
+      // waitToFinalize is buggy, so add a delay to wait before finalizing tx (12 secs for testnet)
+      // TODO: refactor as env var if withdraw window is changed
+      await new Promise((resolve) => setTimeout(resolve, 12000));
 
       // Finalize the withdrawal
       const finalizeHash = await walletClientL1.finalizeWithdrawal({
