@@ -77,6 +77,9 @@ export default function Bridge() {
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
     setAmount("");
+    setIsLoading(false);
+    setWithdrawStatus(null);
+    setWithdrawData(null);
   };
 
   const handleOpenWalletModal = () => {
@@ -530,8 +533,6 @@ export default function Bridge() {
     asyncResumeWithdraw();
   }, [address, connector, activeTab]);
 
-  console.log({ withdrawStatus, withdrawData });
-
   const handleWithdraw = async () => {
     console.log("handleWithdraw", { amount });
     try {
@@ -781,16 +782,16 @@ export default function Bridge() {
             </Button>
           )}
           {errorInput && <p className="text-sm text-red-500">{errorInput}</p>}
-          <div className="pt-6">
-            {withdrawStatus && (
+          {withdrawStatus && activeTab === "withdraw" && (
+            <div className="pt-6">
               <WithdrawTxStatus
                 currentStep={withdrawStatus}
                 withdrawalHash={withdrawData?.withdrawalHash}
                 proveHash={withdrawData?.proveHash}
                 finalizeHash={withdrawData?.finalizeHash}
               />
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         <Dialog open={isConfirmationOpen} onOpenChange={setIsConfirmationOpen}>
