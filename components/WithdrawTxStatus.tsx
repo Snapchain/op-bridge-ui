@@ -18,7 +18,7 @@ interface WithdrawTxStatusProps {
 
 const steps: StepInfo[] = [
   { name: "initiating", label: "Requesting withdraw (L2)" },
-  { name: "initiated", label: "Initiating" },
+  { name: "initiated", label: "Withdraw initiated" },
   { name: "ready_to_prove", label: "Waiting until ready to prove (~1 hour)" },
   { name: "proving", label: "Proving (L1)" },
   { name: "proved", label: "Waiting for proof" },
