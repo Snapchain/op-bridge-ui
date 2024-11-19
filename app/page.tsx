@@ -263,7 +263,9 @@ export default function Bridge() {
       updatedAt: new Date(),
     });
     setPopupTitle("Withdraw initiated");
-    setPopupDescription("Check back in ~1 hour once tx is ready to prove.");
+    setPopupDescription(
+      "Check back in ~1 hour once the transaction is ready to prove. To withdraw funds on L1, you will need to prove that the withdraw request was included in an L2 block."
+    );
   };
 
   const handleWithdrawWaitTillReadyToProve = async () => {
@@ -273,7 +275,7 @@ export default function Bridge() {
       !withdrawData.withdrawalReceipt
     ) {
       setErrorInput(
-        "Failed while waiting for withdrawal to be ready to prove, missing tx hash orreceipt"
+        "Failed while waiting for withdrawal to be ready to prove, missing tx hash or receipt"
       );
       return;
     }
