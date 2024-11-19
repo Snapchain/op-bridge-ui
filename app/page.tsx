@@ -495,7 +495,7 @@ export default function Bridge() {
       setPopupDescription(
         `Resuming withdraw tx ${truncateAddress(
           withdrawsForAddress[0].withdrawalHash as `0x${string}`
-        )} (status: ${withdrawsForAddress[0].status})`
+        )} (status: ${withdrawsForAddress[0].status.replace(/_/g, " ")})`
       );
       setWithdrawStatus(withdrawsForAddress[0].status);
       setWithdrawData(withdrawsForAddress[0]);
