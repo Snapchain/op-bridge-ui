@@ -101,7 +101,6 @@ export default function Bridge() {
       return;
     }
     if (activeTab === "withdraw") {
-      console.log({ withdrawStatus });
       switch (withdrawStatus) {
         case "ready_to_prove":
           handleWithdrawProve();
@@ -199,7 +198,6 @@ export default function Bridge() {
   };
 
   const handleWithdrawInitiate = async () => {
-    console.log("handleWithdrawInitiate");
     try {
       setIsLoading(true);
 
@@ -238,10 +236,8 @@ export default function Bridge() {
   };
 
   const handleWithdrawAddInitiateReceipt = async () => {
-    console.log("handleWithdrawAddInitiateReceipt");
     setIsLoading(true);
     if (!withdrawData || !withdrawData.withdrawalHash) {
-      console.log("Failed to initiate withdrawal, missing tx hash");
       setErrorInput("Failed to initiate withdrawal, missing tx hash");
       return;
     }
@@ -271,15 +267,11 @@ export default function Bridge() {
   };
 
   const handleWithdrawWaitTillReadyToProve = async () => {
-    console.log("handleWithdrawWaitTillReadyToProve");
     if (
       !withdrawData ||
       !withdrawData.withdrawalHash ||
       !withdrawData.withdrawalReceipt
     ) {
-      console.log(
-        "Failed while waiting for withdrawal to be ready to prove, missing tx hash or receipt"
-      );
       setErrorInput(
         "Failed while waiting for withdrawal to be ready to prove, missing tx hash orreceipt"
       );
@@ -314,16 +306,12 @@ export default function Bridge() {
   };
 
   const handleWithdrawProve = async () => {
-    console.log("handleWithdrawProve");
     if (
       !withdrawData ||
       !withdrawData.withdrawalHash ||
       !withdrawData.output ||
       !withdrawData.withdrawal
     ) {
-      console.log(
-        "Failed to prove withdrawal, missing tx hash, output or withdrawal data"
-      );
       setErrorInput(
         "Failed to prove withdrawal, missing tx hash, output or withdrawal data"
       );
@@ -380,15 +368,11 @@ export default function Bridge() {
   };
 
   const handleWithdrawAddProveReceipt = async () => {
-    console.log("handleWithdrawAddProveReceipt");
     if (
       !withdrawData ||
       !withdrawData.withdrawalHash ||
       !withdrawData.proveHash
     ) {
-      console.log(
-        "Failed to add prove receipt, missing withdraw or proving tx hash"
-      );
       setErrorInput(
         "Failed to add prove receipt, missing withdraw or proving tx hash"
       );
@@ -420,15 +404,11 @@ export default function Bridge() {
   };
 
   const handleWithdrawFinalize = async () => {
-    console.log("handleWithdrawFinalize");
     if (
       !withdrawData ||
       !withdrawData.withdrawalHash ||
       !withdrawData.withdrawal
     ) {
-      console.log(
-        "Failed to finalize withdrawal, missing tx hash or withdrawal data"
-      );
       setErrorInput(
         "Failed to finalize withdrawal, missing tx hash or withdrawal data"
       );
@@ -482,15 +462,11 @@ export default function Bridge() {
   };
 
   const handleWithdrawAddFinalizeReceipt = async () => {
-    console.log("handleWithdrawAddFinalizeReceipt");
     if (
       !withdrawData ||
       !withdrawData.withdrawalHash ||
       !withdrawData.finalizeHash
     ) {
-      console.log(
-        "Failed to add finalize receipt, missing withdraw or finalizing tx hash"
-      );
       setErrorInput(
         "Failed to add finalize receipt, missing withdraw or finalizing tx hash"
       );
@@ -557,7 +533,6 @@ export default function Bridge() {
         withdrawAmount,
       };
     } else {
-      console.log("no withdraws found for address");
       return {
         withdrawStatus: null,
         withdrawData: null,
@@ -579,15 +554,12 @@ export default function Bridge() {
   }, [address, connector, activeTab]);
 
   const handleWithdraw = async () => {
-    console.log("handleWithdraw", { amount });
     try {
       if (!amount || parseFloat(amount) <= 0) {
-        console.log("Invalid amount");
         setErrorInput("Invalid amount");
         return;
       }
       if (!address || !connector) {
-        console.log("Please connect your wallet");
         setErrorInput("Please connect your wallet");
         return;
       }
@@ -670,8 +642,6 @@ export default function Bridge() {
       return undefined;
     }
   }, [activeTab, withdrawStatus]);
-
-  console.log({ withdrawStatus, isLoading });
 
   const actionButtonText = useMemo(() => {
     if (isLoading) {
