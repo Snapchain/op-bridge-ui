@@ -100,6 +100,9 @@ export default function Bridge() {
     if (!amount || !isConnected || isLoading) {
       return;
     }
+    if (activeTab === "deposit") {
+      setIsConfirmationOpen(true);
+    }
     if (activeTab === "withdraw") {
       switch (withdrawStatus) {
         case "ready_to_prove":
@@ -107,7 +110,7 @@ export default function Bridge() {
         case "proved":
           handleWithdrawFinalize();
         default:
-          handleWithdrawInitiate();
+          setIsConfirmationOpen(true);
       }
       return;
     }
@@ -433,7 +436,7 @@ export default function Bridge() {
 
       // waitToFinalize is buggy, so add a delay to wait before finalizing tx (12 secs for testnet)
       // TODO: refactor as env var if withdraw window is changed
-      await new Promise((resolve) => setTimeout(resolve, 12000));
+      // await new Promise((resolve) => setTimeout(resolve, 12000));
 
       // Finalize the withdrawal
       const finalizeHash = await walletClientL1.finalizeWithdrawal({
