@@ -64,3 +64,9 @@ To build and run the app:
 yarn build
 yarn start
 ```
+
+### Troubleshooting
+
+If you see this, please disable the OKX wallet Chrome extension:
+
+![image](https://github.com/user-attachments/assets/db73898b-da3b-4eba-a021-5783c3d2e804)
