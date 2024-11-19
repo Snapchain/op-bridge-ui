@@ -13,6 +13,7 @@ interface WithdrawTxStatusProps {
   withdrawalHash?: string;
   proveHash?: string;
   finalizeHash?: string;
+  isLoading: boolean;
 }
 
 const steps: StepInfo[] = [
@@ -29,6 +30,7 @@ export default function WithdrawTxStatus({
   withdrawalHash,
   proveHash,
   finalizeHash,
+  isLoading,
 }: WithdrawTxStatusProps) {
   const link = (step: WithdrawStatus) => {
     switch (step) {
@@ -63,7 +65,9 @@ export default function WithdrawTxStatus({
           if (index <= stepIndex) {
             status = "completed";
           } else if (index === stepIndex + 1) {
-            status = "current";
+            if (isLoading) {
+              status = "current";
+            }
           }
 
           return (

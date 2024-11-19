@@ -96,9 +96,21 @@ export default function Bridge() {
     setIsDisconnectOpen(false);
   };
 
-  const handleBridge = () => {
-    if (amount && isConnected) {
-      setIsConfirmationOpen(true);
+  const handleActionButton = () => {
+    if (!amount || !isConnected || isLoading) {
+      return;
+    }
+    if (activeTab === "withdraw") {
+      console.log({ withdrawStatus });
+      switch (withdrawStatus) {
+        case "ready_to_prove":
+          handleWithdrawProve();
+        case "proved":
+          handleWithdrawFinalize();
+        default:
+          handleWithdrawInitiate();
+      }
+      return;
     }
   };
 
@@ -188,38 +200,46 @@ export default function Bridge() {
 
   const handleWithdrawInitiate = async () => {
     console.log("handleWithdrawInitiate");
-    const [account] = await window.ethereum.request({
-      method: "eth_requestAccounts",
-    });
-    console.log({ account });
-    // Build params for withdraw tx on L1
-    const args = await publicClientL1.buildInitiateWithdrawal({
-      account,
-      to: account,
-      value: ethers.utils.parseEther(amount).toBigInt(),
-    });
-    console.log({ args });
+    try {
+      setIsLoading(true);
 
-    // Execute withdraw tx on L2 and wait for tx be processed
-    const hash = await walletClientL2.initiateWithdrawal(args);
+      const [account] = await window.ethereum.request({
+        method: "eth_requestAccounts",
+      });
+      console.log({ account });
+      // Build params for withdraw tx on L1
+      const args = await publicClientL1.buildInitiateWithdrawal({
+        account,
+        to: account,
+        value: ethers.utils.parseEther(amount).toBigInt(),
+      });
+      console.log({ args });
 
-    // Store to local db
-    const withdraw = {
-      withdrawalHash: hash,
-      address: account,
-      status: "initiating" as WithdrawStatus,
-      args,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    db.withdraws.add(withdraw);
+      // Execute withdraw tx on L2 and wait for tx be processed
+      const hash = await walletClientL2.initiateWithdrawal(args);
 
-    setWithdrawData(withdraw);
-    setWithdrawStatus("initiating");
+      // Store to local db
+      const withdraw = {
+        withdrawalHash: hash,
+        address: account,
+        status: "initiating" as WithdrawStatus,
+        args,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      db.withdraws.add(withdraw);
+
+      setWithdrawData(withdraw);
+      setWithdrawStatus("initiating");
+    } catch (error) {
+      console.log(error);
+      setIsLoading(false);
+    }
   };
 
   const handleWithdrawAddInitiateReceipt = async () => {
     console.log("handleWithdrawAddInitiateReceipt");
+    setIsLoading(true);
     if (!withdrawData || !withdrawData.withdrawalHash) {
       console.log("Failed to initiate withdrawal, missing tx hash");
       setErrorInput("Failed to initiate withdrawal, missing tx hash");
@@ -265,6 +285,7 @@ export default function Bridge() {
       );
       return;
     }
+    setIsLoading(true);
     const { output, withdrawal } = await publicClientL1.waitToProve({
       receipt: withdrawData.withdrawalReceipt,
       targetChain: l2Chain,
@@ -289,6 +310,7 @@ export default function Bridge() {
       withdrawal: withdrawal,
       updatedAt: new Date(),
     });
+    setIsLoading(false);
   };
 
   const handleWithdrawProve = async () => {
@@ -307,47 +329,54 @@ export default function Bridge() {
       );
       return;
     }
-    const proveArgs = await publicClientL2.buildProveWithdrawal({
-      output: withdrawData.output,
-      withdrawal: withdrawData.withdrawal,
-    });
-    console.log({ proveArgs });
+    try {
+      setIsLoading(true);
 
-    const [account] = await window.ethereum.request({
-      method: "eth_requestAccounts",
-    });
+      const proveArgs = await publicClientL2.buildProveWithdrawal({
+        output: withdrawData.output,
+        withdrawal: withdrawData.withdrawal,
+      });
+      console.log({ proveArgs });
 
-    // request switch to L1
-    await switchChain({
-      chainId: Number(NEXT_PUBLIC_L1_CHAIN_ID),
-    });
+      const [account] = await window.ethereum.request({
+        method: "eth_requestAccounts",
+      });
 
-    const proveHash = await walletClientL1.proveWithdrawal({
-      ...proveArgs,
-      authorizationList: [],
-      account,
-    });
-    console.log({ proveHash });
+      // request switch to L1
+      await switchChain({
+        chainId: Number(NEXT_PUBLIC_L1_CHAIN_ID),
+      });
 
-    db.withdraws
-      .where("withdrawalHash")
-      .equals(withdrawData.withdrawalHash)
-      .modify({
+      const proveHash = await walletClientL1.proveWithdrawal({
+        ...proveArgs,
+        authorizationList: [],
+        account,
+      });
+      console.log({ proveHash });
+
+      db.withdraws
+        .where("withdrawalHash")
+        .equals(withdrawData.withdrawalHash)
+        .modify({
+          status: "proving",
+          proveArgs: proveArgs,
+          proveHash: proveHash,
+          updatedAt: new Date(),
+        });
+
+      setWithdrawStatus("proving");
+
+      setWithdrawData({
+        ...withdrawData,
         status: "proving",
         proveArgs: proveArgs,
         proveHash: proveHash,
         updatedAt: new Date(),
       });
-
-    setWithdrawStatus("proving");
-
-    setWithdrawData({
-      ...withdrawData,
-      status: "proving",
-      proveArgs: proveArgs,
-      proveHash: proveHash,
-      updatedAt: new Date(),
-    });
+    } catch (error) {
+      console.log(error);
+      setIsLoading(false);
+    }
   };
 
   const handleWithdrawAddProveReceipt = async () => {
@@ -365,6 +394,7 @@ export default function Bridge() {
       );
       return;
     }
+    setIsLoading(true);
     const proveReceipt = await publicClientL1.waitForTransactionReceipt({
       hash: withdrawData.proveHash,
     });
@@ -386,6 +416,7 @@ export default function Bridge() {
       proveReceipt: proveReceipt,
       updatedAt: new Date(),
     });
+    setIsLoading(false);
   };
 
   const handleWithdrawFinalize = async () => {
@@ -403,50 +434,51 @@ export default function Bridge() {
       );
       return;
     }
-    // request switch to L1
-    await switchChain({
-      chainId: Number(NEXT_PUBLIC_L1_CHAIN_ID),
-    });
-    // Wait until the withdrawal tx is ready to finalize
-    const isReadyToFinalize = await publicClientL1.waitToFinalize({
-      targetChain: l2Chain,
-      withdrawalHash: withdrawData.withdrawalHash,
-    });
-    console.log({ isReadyToFinalize });
-    const [account] = await window.ethereum.request({
-      method: "eth_requestAccounts",
-    });
+    try {
+      setIsLoading(true);
+      // request switch to L1
+      await switchChain({
+        chainId: Number(NEXT_PUBLIC_L1_CHAIN_ID),
+      });
+      // Wait until the withdrawal tx is ready to finalize
+      await publicClientL1.waitToFinalize({
+        targetChain: l2Chain,
+        withdrawalHash: withdrawData.withdrawalHash,
+      });
+      const [account] = await window.ethereum.request({
+        method: "eth_requestAccounts",
+      });
 
-    // Here, we need to wait for a while as `waitToFinalize` is not reliable
-    // Sleep for 20 seconds
-    await new Promise((resolve) => setTimeout(resolve, 20000));
+      // Finalize the withdrawal
+      const finalizeHash = await walletClientL1.finalizeWithdrawal({
+        targetChain: l2Chain,
+        withdrawal: withdrawData.withdrawal,
+        authorizationList: [],
+        account,
+      });
+      console.log({ finalizeHash });
 
-    // Finalize the withdrawal
-    const finalizeHash = await walletClientL1.finalizeWithdrawal({
-      targetChain: l2Chain,
-      withdrawal: withdrawData.withdrawal,
-      authorizationList: [],
-      account,
-    });
-    console.log({ finalizeHash });
+      db.withdraws
+        .where("withdrawalHash")
+        .equals(withdrawData.withdrawalHash)
+        .modify({
+          status: "finalizing",
+          finalizeHash: finalizeHash,
+          updatedAt: new Date(),
+        });
 
-    db.withdraws
-      .where("withdrawalHash")
-      .equals(withdrawData.withdrawalHash)
-      .modify({
+      setWithdrawStatus("finalizing");
+
+      setWithdrawData({
+        ...withdrawData,
         status: "finalizing",
         finalizeHash: finalizeHash,
         updatedAt: new Date(),
       });
-
-    setWithdrawStatus("finalizing");
-
-    setWithdrawData({
-      ...withdrawData,
-      status: "finalizing",
-      finalizeHash: finalizeHash,
-      updatedAt: new Date(),
-    });
+    } catch (error) {
+      console.log(error);
+      setIsLoading(false);
+    }
   };
 
   const handleWithdrawAddFinalizeReceipt = async () => {
@@ -464,6 +496,7 @@ export default function Bridge() {
       );
       return;
     }
+    setIsLoading(true);
 
     const finalizeReceipt = await publicClientL1.waitForTransactionReceipt({
       hash: withdrawData.finalizeHash,
@@ -487,6 +520,7 @@ export default function Bridge() {
       finalizeReceipt: finalizeReceipt,
       updatedAt: new Date(),
     });
+    setIsLoading(false);
   };
 
   const resumeWithdraw = async () => {
@@ -504,9 +538,7 @@ export default function Bridge() {
         withdraw.address.toLowerCase() === address.toLowerCase() &&
         withdraw.status !== "finalized"
     );
-    console.log({ withdrawsForAddress });
     if (withdrawsForAddress.length > 0) {
-      console.log("resuming withdraw");
       setPopupTitle("Resuming withdraw");
       setPopupDescription(
         `Resuming withdraw tx ${truncateAddress(
@@ -560,8 +592,6 @@ export default function Bridge() {
         return;
       }
 
-      setIsLoading(true);
-
       // Initiate
       if (withdrawStatus === null) {
         await handleWithdrawInitiate();
@@ -582,17 +612,17 @@ export default function Bridge() {
       }
 
       // Prove the withdrawal tx on L2
-      if (withdrawStatus === "ready_to_prove") {
-        await handleWithdrawProve();
-      }
+      // if (withdrawStatus === "ready_to_prove") {
+      //   await handleWithdrawProve();
+      // }
 
       if (withdrawStatus === "proving") {
         await handleWithdrawAddProveReceipt();
       }
 
-      if (withdrawStatus === "proved") {
-        await handleWithdrawFinalize();
-      }
+      // if (withdrawStatus === "proved") {
+      //   await handleWithdrawFinalize();
+      // }
 
       if (withdrawStatus === "finalizing") {
         await handleWithdrawAddFinalizeReceipt();
@@ -626,11 +656,64 @@ export default function Bridge() {
     if (activeTab === "deposit") {
       return Number(NEXT_PUBLIC_L1_CHAIN_ID);
     } else if (activeTab === "withdraw") {
+      if (
+        withdrawStatus === "ready_to_prove" ||
+        withdrawStatus === "proving" ||
+        withdrawStatus === "proved" ||
+        withdrawStatus === "finalizing" ||
+        withdrawStatus === "finalized"
+      ) {
+        return Number(NEXT_PUBLIC_L1_CHAIN_ID);
+      }
       return Number(NEXT_PUBLIC_L2_CHAIN_ID);
     } else {
       return undefined;
     }
-  }, [activeTab]);
+  }, [activeTab, withdrawStatus]);
+
+  console.log({ withdrawStatus, isLoading });
+
+  const actionButtonText = useMemo(() => {
+    if (isLoading) {
+      return (
+        <>
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          {activeTab === "deposit" ? "Depositing..." : "Withdrawing..."}
+        </>
+      );
+    }
+    if (activeTab === "deposit") {
+      if (isLoading) {
+        return (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Depositing...
+          </>
+        );
+      }
+      return "Deposit";
+    }
+    if (activeTab === "withdraw") {
+      switch (withdrawStatus) {
+        case "initiating":
+          return "Withdrawing...";
+        case "initiated":
+          return "Withdrawing...";
+        case "ready_to_prove":
+          return "Prove withdrawal";
+        case "proving":
+          return "Proving withdrawal...";
+        case "proved":
+          return "Finalize withdrawal";
+        case "finalizing":
+          return "Finalizing withdrawal...";
+        case "finalized":
+          return "Finalizing withdrawal...";
+        default:
+          return "Withdraw";
+      }
+    }
+  }, [activeTab, withdrawStatus, isLoading]);
 
   // Use effects
   useEffect(() => {
@@ -747,6 +830,16 @@ export default function Bridge() {
           )}
         </div>
 
+        {withdrawStatus && activeTab === "withdraw" && (
+          <WithdrawTxStatus
+            currentStep={withdrawStatus}
+            withdrawalHash={withdrawData?.withdrawalHash}
+            proveHash={withdrawData?.proveHash}
+            finalizeHash={withdrawData?.finalizeHash}
+            isLoading={isLoading}
+          />
+        )}
+
         <div className="flex flex-col space-y-2">
           {!isConnected ? (
             <Button
@@ -769,17 +862,10 @@ export default function Bridge() {
             <Button
               className="w-full"
               size="lg"
-              onClick={handleBridge}
+              onClick={handleActionButton}
               disabled={!amount || isLoading}
             >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {activeTab === "deposit" ? "Depositing..." : "Withdrawing..."}
-                </>
-              ) : (
-                <>{activeTab === "deposit" ? "Deposit" : "Withdraw"}</>
-              )}
+              {actionButtonText}
             </Button>
           ) : (
             <Button
@@ -795,16 +881,6 @@ export default function Bridge() {
             </Button>
           )}
           {errorInput && <p className="text-sm text-red-500">{errorInput}</p>}
-          {withdrawStatus && activeTab === "withdraw" && (
-            <div className="pt-6">
-              <WithdrawTxStatus
-                currentStep={withdrawStatus}
-                withdrawalHash={withdrawData?.withdrawalHash}
-                proveHash={withdrawData?.proveHash}
-                finalizeHash={withdrawData?.finalizeHash}
-              />
-            </div>
-          )}
         </div>
 
         <Dialog open={isConfirmationOpen} onOpenChange={setIsConfirmationOpen}>
