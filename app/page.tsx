@@ -603,7 +603,7 @@ export default function Bridge() {
       }
 
       if (withdrawStatus === "finalized") {
-        setPopupTitle("Withdraw finalized");
+        setPopupTitle("Withdraw completed");
         setPopupDescription("Refresh the page to view your updated balance.");
         setIsLoading(false);
         setAmount("");
