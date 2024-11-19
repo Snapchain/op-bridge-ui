@@ -757,7 +757,7 @@ export default function Bridge() {
               className="w-full"
               size="lg"
               onClick={handleBridge}
-              disabled={!amount}
+              disabled={!amount || isLoading}
             >
               {isLoading ? (
                 <>
