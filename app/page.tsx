@@ -36,7 +36,7 @@ import useChainConfigs from "../hooks/useChainConfigs";
 import { truncateAddress } from "@/lib/utils";
 import Image from "next/image";
 import { getL2TransactionHashes } from "viem/op-stack";
-import { db, WithdrawState, WithdrawStatus } from "@/store/dexie/db";
+import { db, WithdrawState, WithdrawStatus } from "@/store/db";
 import WithdrawTxStatus from "@/components/WithdrawTxStatus";
 
 export default function Bridge() {

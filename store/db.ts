@@ -26,7 +26,7 @@ export interface WithdrawState {
   updatedAt: Date;
 }
 
-export class MySubClassedDexie extends Dexie {
+export class WithdrawDb extends Dexie {
   withdraws!: Table<WithdrawState>;
 
   constructor() {
@@ -38,4 +38,4 @@ export class MySubClassedDexie extends Dexie {
   }
 }
 
-export const db = new MySubClassedDexie();
+export const db = new WithdrawDb();

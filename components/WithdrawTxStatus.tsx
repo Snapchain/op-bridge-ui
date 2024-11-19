@@ -1,4 +1,4 @@
-import { WithdrawStatus } from "@/store/dexie/db";
+import { WithdrawStatus } from "@/store/db";
 import { Check, Loader2, ExternalLink } from "lucide-react";
 import Link from "next/link";
 
