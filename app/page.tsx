@@ -115,6 +115,19 @@ export default function Bridge() {
     setTheme(theme === "dark" ? "light" : "dark");
   };
 
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const depositCap = parseFloat(process.env.NEXT_PUBLIC_DEPOSIT_CAP || "0.1");
+    if (activeTab === "deposit" && parseFloat(value) > depositCap) {
+      setPopupTitle("Deposit cap reached");
+      setPopupDescription(
+        `We are currently capping deposits at ${depositCap} ETH, as Tohma Devnet may be discontinued at any time. Only deposit funds you are willing to lose.`
+      );
+      return;
+    }
+    setAmount(value);
+  };
+
   const handleDeposit = async () => {
     try {
       if (!amount || parseFloat(amount) <= 0) {
@@ -711,7 +724,7 @@ export default function Bridge() {
             placeholder="0.0"
             type="number"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={handleAmountChange}
             disabled={activeTab === "withdraw" && withdrawStatus !== null}
           />
           {isConnected && (
