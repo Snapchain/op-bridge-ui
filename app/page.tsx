@@ -592,19 +592,16 @@ export default function Bridge() {
         await handleWithdrawWaitTillReadyToProve();
       }
 
-      // Prove the withdrawal tx on L2
-      // if (withdrawStatus === "ready_to_prove") {
-      //   await handleWithdrawProve();
-      // }
+      // Skip prove withdrawal tx step as it is manually triggered
 
+      // Wait until the prove tx is received
       if (withdrawStatus === "proving") {
         await handleWithdrawAddProveReceipt();
       }
 
-      // if (withdrawStatus === "proved") {
-      //   await handleWithdrawFinalize();
-      // }
+      // Skip finalize withdrawal tx step as it is manually triggered
 
+      // Wait until the finalize tx is received
       if (withdrawStatus === "finalizing") {
         await handleWithdrawAddFinalizeReceipt();
       }
