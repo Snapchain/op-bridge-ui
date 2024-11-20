@@ -436,7 +436,7 @@ export default function Bridge() {
 
       // waitToFinalize is buggy, so add a delay to wait before finalizing tx (12 secs for testnet)
       // TODO: refactor as env var if withdraw window is changed
-      // await new Promise((resolve) => setTimeout(resolve, 12000));
+      await new Promise((resolve) => setTimeout(resolve, 12000));
 
       // Finalize the withdrawal
       const finalizeHash = await walletClientL1.finalizeWithdrawal({
